@@ -1,0 +1,1622 @@
+-- ClientLib.lua
+-- A Roblox UI Library inspired by the HTML Client interface
+
+local ClientLib = {}
+ClientLib.__index = ClientLib
+
+-- ============================================================
+-- SERVICES
+-- ============================================================
+local Players        = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local TweenService   = game:GetService("TweenService")
+local RunService     = game:GetService("RunService")
+local HttpService    = game:GetService("HttpService")
+
+local LocalPlayer = Players.LocalPlayer
+local Mouse       = LocalPlayer:GetMouse()
+
+-- ============================================================
+-- CONSTANTS / THEME
+-- ============================================================
+local THEME = {
+	-- Backgrounds
+	BG0        = Color3.fromRGB(26,  26,  26),
+	BG1        = Color3.fromRGB(22,  22,  22),
+	BG2        = Color3.fromRGB(33,  33,  33),
+	BG3        = Color3.fromRGB(39,  39,  39),
+	BG4        = Color3.fromRGB(46,  46,  46),
+	BG_HOVER   = Color3.fromRGB(51,  51,  51),
+
+	-- Text
+	TEXT0      = Color3.fromRGB(208, 208, 208),
+	TEXT1      = Color3.fromRGB(153, 153, 153),
+	TEXT2      = Color3.fromRGB(119, 119, 119),
+	TEXT3      = Color3.fromRGB(85,  85,  85),
+	TEXT4      = Color3.fromRGB(68,  68,  68),
+
+	-- Border
+	BORDER     = Color3.fromRGB(39,  39,  39),
+	BORDER2    = Color3.fromRGB(48,  48,  48),
+
+	-- Accent
+	ACCENT     = Color3.fromRGB(136, 136, 136),
+
+	-- Window size
+	WIN_W      = 820,
+	WIN_H      = 560,
+
+	-- Tab bar height
+	TAB_H      = 52,
+
+	-- Module grid
+	COL_COUNT  = 3,
+	COL_GAP    = 10,
+	MOD_PAD    = 14,
+
+	-- Font
+	FONT       = Enum.Font.GothamMedium,
+	FONT_BOLD  = Enum.Font.GothamBold,
+	FONT_MONO  = Enum.Font.Code,
+
+	-- Corner radius
+	RAD_WIN    = 16,
+	RAD_MOD    = 12,
+	RAD_ELEM   = 8,
+	RAD_SMALL  = 6,
+}
+
+-- ============================================================
+-- UTILITY HELPERS
+-- ============================================================
+local U = {}
+
+function U.tween(obj, props, t, style, dir)
+	local info = TweenInfo.new(
+		t    or 0.2,
+		style or Enum.EasingStyle.Quad,
+		dir  or Enum.EasingDirection.Out
+	)
+	TweenService:Create(obj, info, props):Play()
+end
+
+function U.corner(parent, radius)
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(0, radius or THEME.RAD_ELEM)
+	c.Parent = parent
+	return c
+end
+
+function U.stroke(parent, color, thickness)
+	local s = Instance.new("UIStroke")
+	s.Color     = color     or THEME.BORDER
+	s.Thickness = thickness or 1
+	s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	s.Parent    = parent
+	return s
+end
+
+function U.padding(parent, top, right, bottom, left)
+	local p = Instance.new("UIPadding")
+	p.PaddingTop    = UDim.new(0, top    or 0)
+	p.PaddingRight  = UDim.new(0, right  or 0)
+	p.PaddingBottom = UDim.new(0, bottom or 0)
+	p.PaddingLeft   = UDim.new(0, left   or 0)
+	p.Parent        = parent
+	return p
+end
+
+function U.listLayout(parent, dir, spacing, ha, va)
+	local l = Instance.new("UIListLayout")
+	l.FillDirection     = dir     or Enum.FillDirection.Vertical
+	l.Padding           = UDim.new(0, spacing or 4)
+	l.HorizontalAlignment = ha   or Enum.HorizontalAlignment.Left
+	l.VerticalAlignment   = va   or Enum.VerticalAlignment.Top
+	l.SortOrder         = Enum.SortOrder.LayoutOrder
+	l.Parent            = parent
+	return l
+end
+
+function U.label(parent, text, size, color, font, ha)
+	local l = Instance.new("TextLabel")
+	l.Size            = UDim2.new(1, 0, 0, size or 14)
+	l.BackgroundTransparency = 1
+	l.Text            = text  or ""
+	l.TextSize        = size  or 12
+	l.TextColor3      = color or THEME.TEXT2
+	l.Font            = font  or THEME.FONT
+	l.TextXAlignment  = ha    or Enum.TextXAlignment.Left
+	l.Parent          = parent
+	return l
+end
+
+function U.frame(parent, size, pos, color, trans)
+	local f = Instance.new("Frame")
+	f.Size                  = size  or UDim2.new(1, 0, 0, 20)
+	f.Position              = pos   or UDim2.new(0, 0, 0, 0)
+	f.BackgroundColor3      = color or THEME.BG2
+	f.BackgroundTransparency = trans or 0
+	f.BorderSizePixel       = 0
+	f.Parent                = parent
+	return f
+end
+
+function U.button(parent, text, size, pos)
+	local b = Instance.new("TextButton")
+	b.Size                  = size or UDim2.new(0, 70, 0, 24)
+	b.Position              = pos  or UDim2.new(0, 0, 0, 0)
+	b.BackgroundColor3      = THEME.BG3
+	b.TextColor3            = THEME.TEXT1
+	b.Text                  = text or "Button"
+	b.TextSize              = 11
+	b.Font                  = THEME.FONT
+	b.BorderSizePixel       = 0
+	b.AutoButtonColor       = false
+	b.Parent                = parent
+	U.corner(b, THEME.RAD_ELEM)
+	U.stroke(b, THEME.BORDER2)
+	-- hover
+	b.MouseEnter:Connect(function()
+		U.tween(b, {BackgroundColor3 = THEME.BG_HOVER, TextColor3 = THEME.TEXT0})
+	end)
+	b.MouseLeave:Connect(function()
+		U.tween(b, {BackgroundColor3 = THEME.BG3, TextColor3 = THEME.TEXT1})
+	end)
+	return b
+end
+
+-- clamp
+function U.clamp(v, lo, hi) return math.max(lo, math.min(hi, v)) end
+
+-- hex helpers
+function U.toHex(c)
+	return string.format("#%02x%02x%02x",
+		math.round(c.R * 255),
+		math.round(c.G * 255),
+		math.round(c.B * 255))
+end
+
+function U.fromHex(h)
+	h = h:gsub("#","")
+	local r = tonumber(h:sub(1,2),16) or 0
+	local g = tonumber(h:sub(3,4),16) or 0
+	local b = tonumber(h:sub(5,6),16) or 0
+	return Color3.fromRGB(r,g,b)
+end
+
+-- HSV ↔ RGB (Roblox Color3 already has toHSV / fromHSV)
+function U.hsvToColor3(h,s,v)
+	return Color3.fromHSV(h/360, s, v)
+end
+
+function U.color3ToHSV(c)
+	local h,s,v = Color3.toHSV(c)
+	return h*360, s, v
+end
+
+-- ============================================================
+-- SCREEN GUI SETUP
+-- ============================================================
+function ClientLib.new(title)
+	local self = setmetatable({}, ClientLib)
+
+	self.Title   = title or "Client"
+	self.Tabs    = {}
+	self.ActiveTab = nil
+	self.Accent  = THEME.ACCENT
+	self.Modules = {} -- flat list for callbacks
+	self.KeybindMap = {} -- key -> callback
+
+	-- Root ScreenGui
+	local sg = Instance.new("ScreenGui")
+	sg.Name             = "ClientLibGUI"
+	sg.ResetOnSpawn     = false
+	sg.ZIndexBehavior   = Enum.ZIndexBehavior.Sibling
+	sg.IgnoreGuiInset   = true
+	sg.Parent           = LocalPlayer:WaitForChild("PlayerGui")
+	self.ScreenGui      = sg
+
+	-- Main Window Frame
+	local win = Instance.new("Frame")
+	win.Name                 = "Window"
+	win.Size                 = UDim2.new(0, THEME.WIN_W, 0, THEME.WIN_H)
+	win.Position             = UDim2.new(0.5, -THEME.WIN_W/2, 0.5, -THEME.WIN_H/2)
+	win.BackgroundColor3     = THEME.BG0
+	win.BorderSizePixel      = 0
+	win.ClipsDescendants     = true
+	win.Parent               = sg
+	U.corner(win, THEME.RAD_WIN)
+	U.stroke(win, THEME.BORDER)
+	self.Window = win
+
+	-- Make window draggable
+	self:_makeDraggable(win)
+
+	-- Content area (scrolling)
+	local scroll = Instance.new("ScrollingFrame")
+	scroll.Name                   = "ContentArea"
+	scroll.Size                   = UDim2.new(1, 0, 1, -THEME.TAB_H)
+	scroll.Position               = UDim2.new(0, 0, 0, 0)
+	scroll.BackgroundTransparency = 1
+	scroll.BorderSizePixel        = 0
+	scroll.ScrollBarThickness     = 4
+	scroll.ScrollBarImageColor3   = THEME.BG4
+	scroll.CanvasSize             = UDim2.new(0, 0, 0, 0)
+	scroll.AutomaticCanvasSize    = Enum.AutomaticSize.Y
+	scroll.Parent                 = win
+	self.ContentArea = scroll
+
+	-- Tab container (bottom bar)
+	local tabBar = U.frame(win,
+		UDim2.new(1, 0, 0, THEME.TAB_H),
+		UDim2.new(0, 0, 1, -THEME.TAB_H),
+		THEME.BG1)
+	U.stroke(tabBar, THEME.BORDER)
+	-- top border line only via UIStroke won't work perfectly, so add a line frame:
+	local topLine = U.frame(tabBar, UDim2.new(1,0,0,1), UDim2.new(0,0,0,0), THEME.BORDER)
+	topLine.ZIndex = 2
+	self.TabBar = tabBar
+
+	local tabLayout = Instance.new("UIListLayout")
+	tabLayout.FillDirection       = Enum.FillDirection.Horizontal
+	tabLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+	tabLayout.VerticalAlignment   = Enum.VerticalAlignment.Center
+	tabLayout.Padding             = UDim.new(0, 6)
+	tabLayout.SortOrder           = Enum.SortOrder.LayoutOrder
+	tabLayout.Parent              = tabBar
+
+	self._tabLayout = tabLayout
+
+	-- Color Picker popup (built once, shared)
+	self._colorPicker = self:_buildColorPicker()
+
+	-- Key input handler
+	UserInputService.InputBegan:Connect(function(inp, gpe)
+		if gpe then return end
+		if inp.UserInputType == Enum.UserInputType.Keyboard then
+			local key = inp.KeyCode
+			if self.KeybindMap[key] then
+				self.KeybindMap[key]()
+			end
+		end
+	end)
+
+	return self
+end
+
+-- ============================================================
+-- DRAGGABLE WINDOW
+-- ============================================================
+function ClientLib:_makeDraggable(frame)
+	local dragging, dragStart, startPos
+	frame.InputBegan:Connect(function(inp)
+		if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+			-- only drag if clicking on bg (not a button inside)
+			dragging  = true
+			dragStart = inp.Position
+			startPos  = frame.Position
+		end
+	end)
+	frame.InputEnded:Connect(function(inp)
+		if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+			dragging = false
+		end
+	end)
+	UserInputService.InputChanged:Connect(function(inp)
+		if dragging and inp.UserInputType == Enum.UserInputType.MouseMovement then
+			local delta = inp.Position - dragStart
+			frame.Position = UDim2.new(
+				startPos.X.Scale,
+				startPos.X.Offset + delta.X,
+				startPos.Y.Scale,
+				startPos.Y.Offset + delta.Y
+			)
+		end
+	end)
+end
+
+-- ============================================================
+-- ADD TAB
+-- ============================================================
+function ClientLib:addTab(name, icon)
+	-- icon = Roblox image asset id string or "" 
+	local tabData = {
+		Name    = name,
+		Icon    = icon,
+		Modules = {},
+		Page    = nil,
+		Button  = nil,
+	}
+
+	-- Page frame inside ContentArea
+	local page = U.frame(self.ContentArea,
+		UDim2.new(1, 0, 1, 0),
+		UDim2.new(0, 0, 0, 0),
+		Color3.fromRGB(0,0,0), 1)
+	page.Name    = "Page_" .. name
+	page.Visible = false
+	page.ClipsDescendants = false
+
+	-- Grid layout using UIGridLayout
+	local grid = Instance.new("UIGridLayout")
+	grid.CellSize         = UDim2.new(1/THEME.COL_COUNT, -7, 0, 0)
+	grid.CellPaddingX	  = UDim2.new(0, THEME.COL_GAP, 0, 0)
+	grid.CellPaddingY	  = UDim2.new(0, THEME.COL_GAP, 0, 0)
+	-- We'll use manual positioning instead for variable height modules
+	-- So remove grid and use UIListLayout in columns:
+	grid:Destroy()
+
+	-- Use 3 column frames with list layouts
+	local colContainer = U.frame(page,
+		UDim2.new(1, -36, 1, 0),
+		UDim2.new(0, 18, 0, 18),
+		Color3.fromRGB(0,0,0), 1)
+	colContainer.Name = "ColContainer"
+
+	local colLayout = Instance.new("UIListLayout")
+	colLayout.FillDirection = Enum.FillDirection.Horizontal
+	colLayout.Padding       = UDim.new(0, THEME.COL_GAP)
+	colLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+	colLayout.VerticalAlignment   = Enum.VerticalAlignment.Top
+	colLayout.SortOrder   = Enum.SortOrder.LayoutOrder
+	colLayout.Parent      = colContainer
+
+	local cols = {}
+	for i = 1, THEME.COL_COUNT do
+		local col = U.frame(colContainer,
+			UDim2.new(1/THEME.COL_COUNT, -(THEME.COL_GAP*(THEME.COL_COUNT-1)/THEME.COL_COUNT), 0, 2000),
+			UDim2.new(0,0,0,0),
+			Color3.fromRGB(0,0,0), 1)
+		col.Name         = "Col" .. i
+		col.LayoutOrder  = i
+		col.AutomaticSize = Enum.AutomaticSize.Y
+		U.listLayout(col, Enum.FillDirection.Vertical, THEME.COL_GAP)
+		cols[i] = col
+	end
+
+	tabData.Page    = page
+	tabData.Cols    = cols
+	tabData.ColIdx  = 1  -- current column to add to (round-robin)
+
+	-- Tab Button
+	local btn = Instance.new("TextButton")
+	btn.Name             = "TabBtn_" .. name
+	btn.Size             = UDim2.new(0, 44, 0, 40)
+	btn.BackgroundColor3 = Color3.fromRGB(0,0,0)
+	btn.BackgroundTransparency = 1
+	btn.BorderSizePixel  = 0
+	btn.AutoButtonColor  = false
+	btn.Text             = ""
+	btn.Font             = THEME.FONT
+	btn.TextSize         = 13
+	btn.LayoutOrder      = #self.Tabs + 1
+	btn.Parent           = self.TabBar
+	U.corner(btn, 12)
+
+	-- Icon label
+	local iconLbl = Instance.new("TextLabel")
+	iconLbl.Name                 = "Icon"
+	iconLbl.Size                 = UDim2.new(0, 20, 1, 0)
+	iconLbl.Position             = UDim2.new(0, 12, 0, 0)
+	iconLbl.BackgroundTransparency = 1
+	iconLbl.Text                 = icon or name:sub(1,1)
+	iconLbl.TextSize             = 14
+	iconLbl.Font                 = THEME.FONT_BOLD
+	iconLbl.TextColor3           = THEME.TEXT3
+	iconLbl.TextXAlignment       = Enum.TextXAlignment.Center
+	iconLbl.Parent               = btn
+
+	-- Name label (hidden, expands on active)
+	local nameLbl = Instance.new("TextLabel")
+	nameLbl.Name                 = "Label"
+	nameLbl.Size                 = UDim2.new(0, 0, 1, 0)
+	nameLbl.Position             = UDim2.new(0, 38, 0, 0)
+	nameLbl.BackgroundTransparency = 1
+	nameLbl.Text                 = name
+	nameLbl.TextSize             = 13
+	nameLbl.Font                 = THEME.FONT
+	nameLbl.TextColor3           = THEME.ACCENT
+	nameLbl.TextXAlignment       = Enum.TextXAlignment.Left
+	nameLbl.ClipsDescendants     = true
+	nameLbl.Visible              = false
+	nameLbl.Parent               = btn
+
+	tabData.Button   = btn
+	tabData.IconLbl  = iconLbl
+	tabData.NameLbl  = nameLbl
+
+	-- Click handler
+	btn.MouseButton1Click:Connect(function()
+		self:_selectTab(tabData)
+	end)
+	btn.MouseEnter:Connect(function()
+		if self.ActiveTab ~= tabData then
+			U.tween(iconLbl, {TextColor3 = THEME.TEXT2}, 0.15)
+			U.tween(btn, {BackgroundTransparency = 0.85}, 0.15)
+			btn.BackgroundColor3 = THEME.BG0
+		end
+	end)
+	btn.MouseLeave:Connect(function()
+		if self.ActiveTab ~= tabData then
+			U.tween(iconLbl, {TextColor3 = THEME.TEXT3}, 0.15)
+			U.tween(btn, {BackgroundTransparency = 1}, 0.15)
+		end
+	end)
+
+	table.insert(self.Tabs, tabData)
+
+	-- Select first tab automatically
+	if #self.Tabs == 1 then
+		self:_selectTab(tabData)
+	end
+
+	return tabData
+end
+
+function ClientLib:_selectTab(tabData)
+	-- Hide all pages, deactivate all buttons
+	for _, td in ipairs(self.Tabs) do
+		td.Page.Visible = false
+		td.NameLbl.Visible = false
+		U.tween(td.Button, {BackgroundTransparency = 1, BackgroundColor3 = THEME.BG0}, 0.2)
+		U.tween(td.IconLbl, {TextColor3 = THEME.TEXT3}, 0.2)
+		td.Button.Size = UDim2.new(0, 44, 0, 40)
+	end
+	-- Show selected
+	tabData.Page.Visible = true
+	tabData.NameLbl.Visible = true
+	tabData.Button.BackgroundTransparency = 0
+	tabData.Button.BackgroundColor3 = THEME.BG2
+	tabData.NameLbl.TextColor3 = self.Accent
+	U.tween(tabData.IconLbl, {TextColor3 = self.Accent}, 0.2)
+
+	-- Expand button size
+	local textW = tabData.Button:FindFirstChild("Label")
+	-- Animate width
+	local targetW = 44 + 10 + string.len(tabData.Name) * 8
+	U.tween(tabData.Button, {Size = UDim2.new(0, targetW, 0, 40)}, 0.3)
+
+	self.ActiveTab = tabData
+	self._colorPicker.Frame.Visible = false
+end
+
+-- ============================================================
+-- ADD MODULE  (returns module handle for adding elements)
+-- ============================================================
+function ClientLib:addModule(tabData, moduleName, defaultEnabled)
+	local col = tabData.Cols[tabData.ColIdx]
+	tabData.ColIdx = (tabData.ColIdx % THEME.COL_COUNT) + 1
+
+	-- Module frame
+	local modFrame = U.frame(col,
+		UDim2.new(1, 0, 0, 0),
+		UDim2.new(0,0,0,0),
+		THEME.BG2)
+	modFrame.Name         = "Module_" .. moduleName
+	modFrame.AutomaticSize = Enum.AutomaticSize.Y
+	modFrame.LayoutOrder  = #tabData.Modules + 1
+	U.corner(modFrame, THEME.RAD_MOD)
+	U.stroke(modFrame, THEME.BORDER)
+	U.padding(modFrame, THEME.MOD_PAD, THEME.MOD_PAD, THEME.MOD_PAD, THEME.MOD_PAD)
+
+	local modLayout = U.listLayout(modFrame, Enum.FillDirection.Vertical, 10)
+
+	-- Header row
+	local header = U.frame(modFrame, UDim2.new(1,0,0,20), UDim2.new(0,0,0,0), Color3.fromRGB(0,0,0), 1)
+	header.Name = "Header"
+	header.LayoutOrder = 0
+
+	local headerLayout = Instance.new("UIListLayout")
+	headerLayout.FillDirection       = Enum.FillDirection.Horizontal
+	headerLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+	headerLayout.VerticalAlignment   = Enum.VerticalAlignment.Center
+	headerLayout.SortOrder           = Enum.SortOrder.LayoutOrder
+	headerLayout.Parent              = header
+
+	local nameLabel = Instance.new("TextLabel")
+	nameLabel.Size                  = UDim2.new(1, -46, 1, 0)
+	nameLabel.BackgroundTransparency = 1
+	nameLabel.Text                  = moduleName
+	nameLabel.TextSize              = 13
+	nameLabel.Font                  = THEME.FONT_BOLD
+	nameLabel.TextColor3            = THEME.TEXT0
+	nameLabel.TextXAlignment        = Enum.TextXAlignment.Left
+	nameLabel.LayoutOrder           = 1
+	nameLabel.Parent                = header
+
+	-- Toggle
+	local enabled = defaultEnabled or false
+	local toggleBtn, toggleDot = self:_buildToggle(header, enabled)
+	toggleBtn.LayoutOrder = 2
+
+	local moduleData = {
+		Name      = moduleName,
+		Frame     = modFrame,
+		Enabled   = enabled,
+		OnToggle  = nil,
+		ElemCount = 1,
+	}
+
+	-- Toggle logic
+	toggleBtn.MouseButton1Click:Connect(function()
+		moduleData.Enabled = not moduleData.Enabled
+		self:_animateToggle(toggleDot, moduleData.Enabled)
+		if moduleData.OnToggle then
+			moduleData.OnToggle(moduleData.Enabled)
+		end
+	end)
+
+	-- If defaultEnabled draw correct state
+	if enabled then
+		toggleDot.Position = UDim2.new(0, 19, 0.5, -7)
+		toggleDot.BackgroundColor3 = self.Accent
+	end
+
+	table.insert(tabData.Modules, moduleData)
+	return moduleData
+end
+
+-- ============================================================
+-- TOGGLE BUILDER
+-- ============================================================
+function ClientLib:_buildToggle(parent, enabled)
+	local track = Instance.new("TextButton")
+	track.Name               = "Toggle"
+	track.Size               = UDim2.new(0, 36, 0, 20)
+	track.BackgroundColor3   = THEME.BG4
+	track.BorderSizePixel    = 0
+	track.Text               = ""
+	track.AutoButtonColor    = false
+	track.Parent             = parent
+	U.corner(track, 10)
+
+	local dot = Instance.new("Frame")
+	dot.Name               = "Dot"
+	dot.Size               = UDim2.new(0, 14, 0, 14)
+	dot.Position           = UDim2.new(0, 3, 0.5, -7)
+	dot.BackgroundColor3   = enabled and THEME.ACCENT or THEME.TEXT3
+	dot.BorderSizePixel    = 0
+	dot.ZIndex             = 3
+	dot.Parent             = track
+	U.corner(dot, 7)
+
+	return track, dot
+end
+
+function ClientLib:_buildMiniToggle(parent, enabled)
+	local track = Instance.new("TextButton")
+	track.Name             = "MiniToggle"
+	track.Size             = UDim2.new(0, 28, 0, 16)
+	track.BackgroundColor3 = THEME.BG4
+	track.BorderSizePixel  = 0
+	track.Text             = ""
+	track.AutoButtonColor  = false
+	track.Parent           = parent
+	U.corner(track, 8)
+
+	local dot = Instance.new("Frame")
+	dot.Name               = "Dot"
+	dot.Size               = UDim2.new(0, 10, 0, 10)
+	dot.Position           = UDim2.new(0, 3, 0.5, -5)
+	dot.BackgroundColor3   = enabled and THEME.ACCENT or THEME.TEXT3
+	dot.BorderSizePixel    = 0
+	dot.ZIndex             = 3
+	dot.Parent             = track
+	U.corner(dot, 5)
+
+	if enabled then
+		dot.Position = UDim2.new(0, 15, 0.5, -5)
+		dot.BackgroundColor3 = self.Accent
+	end
+
+	return track, dot
+end
+
+function ClientLib:_animateToggle(dot, enabled, mini)
+	local onPos  = mini and UDim2.new(0, 15, 0.5, -5) or UDim2.new(0, 19, 0.5, -7)
+	local offPos = mini and UDim2.new(0, 3, 0.5, -5)  or UDim2.new(0, 3, 0.5, -7)
+	U.tween(dot, {
+		Position         = enabled and onPos or offPos,
+		BackgroundColor3 = enabled and self.Accent or THEME.TEXT3,
+	}, 0.25, Enum.EasingStyle.Quad)
+end
+
+-- ============================================================
+-- MODULE ELEMENT: TOGGLE (on:change callback)
+-- ============================================================
+function ClientLib:addToggle(moduleData, labelText, default, onChange)
+	local enabled = default or false
+
+	local row = U.frame(moduleData.Frame,
+		UDim2.new(1, 0, 0, 20),
+		UDim2.new(0,0,0,0),
+		Color3.fromRGB(0,0,0), 1)
+	row.Name         = "ToggleRow_" .. labelText
+	row.LayoutOrder  = moduleData.ElemCount
+	moduleData.ElemCount += 1
+
+	local lbl = U.label(row, labelText, 11, THEME.TEXT2, THEME.FONT)
+	lbl.Size = UDim2.new(1, -38, 1, 0)
+	lbl.TextYAlignment = Enum.TextYAlignment.Center
+
+	local track, dot = self:_buildMiniToggle(row, enabled)
+	track.Position  = UDim2.new(1, -28, 0.5, -8)
+	track.AnchorPoint = Vector2.new(0, 0)
+
+	local state = {Value = enabled}
+	track.MouseButton1Click:Connect(function()
+		state.Value = not state.Value
+		self:_animateToggle(dot, state.Value, true)
+		if onChange then onChange(state.Value) end
+	end)
+
+	return state
+end
+
+-- ============================================================
+-- MODULE ELEMENT: SLIDER
+-- ============================================================
+function ClientLib:addSlider(moduleData, labelText, min, max, default, step, suffix, onChange)
+	min    = min    or 0
+	max    = max    or 100
+	default = default or min
+	step   = step   or 1
+	suffix = suffix or ""
+
+	local container = U.frame(moduleData.Frame,
+		UDim2.new(1,0,0,36),
+		UDim2.new(0,0,0,0),
+		Color3.fromRGB(0,0,0), 1)
+	container.Name        = "Slider_" .. labelText
+	container.LayoutOrder = moduleData.ElemCount
+	moduleData.ElemCount  += 1
+	U.listLayout(container, Enum.FillDirection.Vertical, 4)
+
+	-- Row: label + value
+	local labelRow = U.frame(container, UDim2.new(1,0,0,14), nil, Color3.fromRGB(0,0,0), 1)
+	labelRow.Name = "LabelRow"
+
+	local lbl = U.label(labelRow, labelText, 11, THEME.TEXT2, THEME.FONT)
+	lbl.Size = UDim2.new(0.5,0,1,0)
+
+	local function fmt(v)
+		if step >= 1 then return tostring(v) .. suffix
+		else return string.format("%.1f", v) .. suffix end
+	end
+
+	local valLbl = Instance.new("TextLabel")
+	valLbl.Size              = UDim2.new(0.5,0,1,0)
+	valLbl.Position          = UDim2.new(0.5,0,0,0)
+	valLbl.BackgroundTransparency = 1
+	valLbl.Text              = fmt(default)
+	valLbl.TextSize          = 11
+	valLbl.Font              = THEME.FONT
+	valLbl.TextColor3        = THEME.TEXT1
+	valLbl.TextXAlignment    = Enum.TextXAlignment.Right
+	valLbl.Parent            = labelRow
+
+	-- Track
+	local trackWrap = U.frame(container, UDim2.new(1,0,0,16), nil, Color3.fromRGB(0,0,0), 1)
+	trackWrap.Name = "TrackWrap"
+
+	local track = U.frame(trackWrap, UDim2.new(1,0,0,4), UDim2.new(0,0,0.5,-2), THEME.BG4)
+	track.Name = "Track"
+	U.corner(track, 2)
+
+	local fill = U.frame(track, UDim2.new(0,0,1,0), nil, self.Accent)
+	fill.Name = "Fill"
+	U.corner(fill, 2)
+
+	local thumb = Instance.new("TextButton")
+	thumb.Name             = "Thumb"
+	thumb.Size             = UDim2.new(0, 12, 0, 12)
+	thumb.Position         = UDim2.new(0, 0, 0.5, -6)
+	thumb.BackgroundColor3 = THEME.TEXT0
+	thumb.BorderSizePixel  = 0
+	thumb.Text             = ""
+	thumb.AutoButtonColor  = false
+	thumb.ZIndex           = 5
+	thumb.Parent           = track
+	U.corner(thumb, 6)
+
+	-- State
+	local state = {Value = default}
+	local function ratio() return (state.Value - min) / (max - min) end
+	local function setVal(v)
+		v = U.clamp(v, min, max)
+		v = math.round(v / step) * step
+		state.Value = v
+		local r = ratio()
+		fill.Size    = UDim2.new(r, 0, 1, 0)
+		thumb.Position = UDim2.new(r, -6, 0.5, -6)
+		valLbl.Text  = fmt(v)
+		if onChange then onChange(v) end
+	end
+	setVal(default)
+
+	-- Drag logic
+	local dragging = false
+	local function applyMouse(x)
+		local abs = track.AbsolutePosition
+		local w   = track.AbsoluteSize.X
+		local r   = U.clamp((x - abs.X) / w, 0, 1)
+		local raw = min + r * (max - min)
+		setVal(raw)
+	end
+
+	thumb.MouseButton1Down:Connect(function() dragging = true end)
+	track.MouseButton1Down:Connect(function(x,_) dragging = true; applyMouse(x + track.AbsolutePosition.X) end)
+
+	-- Use InputChanged for smooth dragging
+	UserInputService.InputChanged:Connect(function(inp)
+		if dragging and inp.UserInputType == Enum.UserInputType.MouseMovement then
+			applyMouse(inp.Position.X)
+		end
+	end)
+	UserInputService.InputEnded:Connect(function(inp)
+		if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+			dragging = false
+		end
+	end)
+
+	return state
+end
+
+-- ============================================================
+-- MODULE ELEMENT: DROPDOWN
+-- ============================================================
+function ClientLib:addDropdown(moduleData, labelText, options, default, onChange)
+	local container = U.frame(moduleData.Frame,
+		UDim2.new(1,0,0,0),
+		nil, Color3.fromRGB(0,0,0), 1)
+	container.Name        = "Dropdown_" .. labelText
+	container.LayoutOrder = moduleData.ElemCount
+	container.AutomaticSize = Enum.AutomaticSize.Y
+	moduleData.ElemCount  += 1
+	U.listLayout(container, Enum.FillDirection.Vertical, 4)
+
+	local lbl = U.label(container, labelText, 11, THEME.TEXT2, THEME.FONT)
+	lbl.LayoutOrder = 0
+
+	-- Selected button
+	local selBtn = Instance.new("TextButton")
+	selBtn.Name             = "SelBtn"
+	selBtn.Size             = UDim2.new(1, 0, 0, 24)
+	selBtn.BackgroundColor3 = THEME.BG3
+	selBtn.BorderSizePixel  = 0
+	selBtn.Text             = ""
+	selBtn.AutoButtonColor  = false
+	selBtn.LayoutOrder      = 1
+	selBtn.Parent           = container
+	U.corner(selBtn, THEME.RAD_ELEM)
+	U.stroke(selBtn, THEME.BORDER2)
+
+	local selText = Instance.new("TextLabel")
+	selText.Size             = UDim2.new(1,-24,1,0)
+	selText.Position         = UDim2.new(0,10,0,0)
+	selText.BackgroundTransparency = 1
+	selText.Text             = default or (options[1] or "")
+	selText.TextSize         = 11
+	selText.Font             = THEME.FONT
+	selText.TextColor3       = THEME.TEXT1
+	selText.TextXAlignment   = Enum.TextXAlignment.Left
+	selText.Parent           = selBtn
+
+	local chevron = Instance.new("TextLabel")
+	chevron.Size             = UDim2.new(0,16,1,0)
+	chevron.Position         = UDim2.new(1,-20,0,0)
+	chevron.BackgroundTransparency = 1
+	chevron.Text             = "▾"
+	chevron.TextSize         = 11
+	chevron.Font             = THEME.FONT
+	chevron.TextColor3       = THEME.TEXT3
+	chevron.TextXAlignment   = Enum.TextXAlignment.Center
+	chevron.Parent           = selBtn
+
+	-- Dropdown list (overlay, absolute position via ClipsDescendants hack)
+	local listHolder = U.frame(container,
+		UDim2.new(1,0,0,0),
+		nil, THEME.BG3)
+	listHolder.Name         = "List"
+	listHolder.AutomaticSize = Enum.AutomaticSize.Y
+	listHolder.LayoutOrder  = 2
+	listHolder.Visible      = false
+	U.corner(listHolder, THEME.RAD_ELEM)
+	U.stroke(listHolder, THEME.BORDER2)
+	U.listLayout(listHolder, Enum.FillDirection.Vertical, 0)
+
+	local state = {Value = default or options[1]}
+
+	local function closeList()
+		listHolder.Visible = false
+		chevron.Text       = "▾"
+	end
+
+	for i, opt in ipairs(options) do
+		local item = Instance.new("TextButton")
+		item.Name             = "Item_" .. opt
+		item.Size             = UDim2.new(1,0,0,24)
+		item.BackgroundColor3 = THEME.BG3
+		item.BorderSizePixel  = 0
+		item.Text             = ""
+		item.AutoButtonColor  = false
+		item.LayoutOrder      = i
+		item.Parent           = listHolder
+
+		local itemTxt = Instance.new("TextLabel")
+		itemTxt.Size             = UDim2.new(1,0,1,0)
+		itemTxt.Position         = UDim2.new(0,10,0,0)
+		itemTxt.BackgroundTransparency = 1
+		itemTxt.Text             = opt
+		itemTxt.TextSize         = 11
+		itemTxt.Font             = THEME.FONT
+		itemTxt.TextColor3       = (opt == state.Value) and self.Accent or THEME.TEXT1
+		itemTxt.TextXAlignment   = Enum.TextXAlignment.Left
+		itemTxt.Parent           = item
+
+		item.MouseEnter:Connect(function()
+			U.tween(item, {BackgroundColor3 = THEME.BG_HOVER}, 0.1)
+			itemTxt.TextColor3 = THEME.TEXT0
+		end)
+		item.MouseLeave:Connect(function()
+			U.tween(item, {BackgroundColor3 = THEME.BG3}, 0.1)
+			itemTxt.TextColor3 = (opt == state.Value) and self.Accent or THEME.TEXT1
+		end)
+		item.MouseButton1Click:Connect(function()
+			state.Value    = opt
+			selText.Text   = opt
+			-- reset all item colors
+			for _, c in ipairs(listHolder:GetChildren()) do
+				if c:IsA("TextButton") then
+					local t = c:FindFirstChildOfClass("TextLabel")
+					if t then t.TextColor3 = THEME.TEXT1 end
+				end
+			end
+			itemTxt.TextColor3 = self.Accent
+			closeList()
+			if onChange then onChange(opt) end
+		end)
+	end
+
+	selBtn.MouseButton1Click:Connect(function()
+		if listHolder.Visible then closeList()
+		else
+			listHolder.Visible = true
+			chevron.Text       = "▴"
+		end
+	end)
+
+	return state
+end
+
+-- ============================================================
+-- MODULE ELEMENT: MULTI-SELECT DROPDOWN
+-- ============================================================
+function ClientLib:addMultiDropdown(moduleData, labelText, options, defaults, onChange)
+	defaults = defaults or {}
+	local selected = {}
+	for _, d in ipairs(defaults) do selected[d] = true end
+
+	local function getSelected()
+		local out = {}
+		for _, o in ipairs(options) do
+			if selected[o] then table.insert(out, o) end
+		end
+		return out
+	end
+
+	local function summaryText()
+		local s = getSelected()
+		return #s > 0 and table.concat(s, ", ") or "None"
+	end
+
+	local container = U.frame(moduleData.Frame,
+		UDim2.new(1,0,0,0), nil, Color3.fromRGB(0,0,0), 1)
+	container.Name        = "MultiDD_" .. labelText
+	container.LayoutOrder = moduleData.ElemCount
+	container.AutomaticSize = Enum.AutomaticSize.Y
+	moduleData.ElemCount  += 1
+	U.listLayout(container, Enum.FillDirection.Vertical, 4)
+
+	local lbl = U.label(container, labelText, 11, THEME.TEXT2, THEME.FONT)
+	lbl.LayoutOrder = 0
+
+	local selBtn = Instance.new("TextButton")
+	selBtn.Size             = UDim2.new(1,0,0,24)
+	selBtn.BackgroundColor3 = THEME.BG3
+	selBtn.BorderSizePixel  = 0
+	selBtn.Text             = ""
+	selBtn.AutoButtonColor  = false
+	selBtn.LayoutOrder      = 1
+	selBtn.Parent           = container
+	U.corner(selBtn, THEME.RAD_ELEM)
+	U.stroke(selBtn, THEME.BORDER2)
+
+	local selText = Instance.new("TextLabel")
+	selText.Size           = UDim2.new(1,-24,1,0)
+	selText.Position       = UDim2.new(0,10,0,0)
+	selText.BackgroundTransparency = 1
+	selText.Text           = summaryText()
+	selText.TextSize       = 11
+	selText.Font           = THEME.FONT
+	selText.TextColor3     = THEME.TEXT1
+	selText.TextXAlignment = Enum.TextXAlignment.Left
+	selText.Parent         = selBtn
+
+	local chevron = Instance.new("TextLabel")
+	chevron.Size           = UDim2.new(0,16,1,0)
+	chevron.Position       = UDim2.new(1,-20,0,0)
+	chevron.BackgroundTransparency = 1
+	chevron.Text           = "▾"
+	chevron.TextSize       = 11
+	chevron.Font           = THEME.FONT
+	chevron.TextColor3     = THEME.TEXT3
+	chevron.TextXAlignment = Enum.TextXAlignment.Center
+	chevron.Parent         = selBtn
+
+	local listHolder = U.frame(container,
+		UDim2.new(1,0,0,0), nil, THEME.BG3)
+	listHolder.AutomaticSize = Enum.AutomaticSize.Y
+	listHolder.LayoutOrder  = 2
+	listHolder.Visible      = false
+	U.corner(listHolder, THEME.RAD_ELEM)
+	U.stroke(listHolder, THEME.BORDER2)
+	U.listLayout(listHolder, Enum.FillDirection.Vertical, 0)
+
+	local checkboxes = {}
+
+	for i, opt in ipairs(options) do
+		local item = Instance.new("TextButton")
+		item.Size             = UDim2.new(1,0,0,24)
+		item.BackgroundColor3 = THEME.BG3
+		item.BorderSizePixel  = 0
+		item.Text             = ""
+		item.AutoButtonColor  = false
+		item.LayoutOrder      = i
+		item.Parent           = listHolder
+
+		-- Checkbox box
+		local box = U.frame(item, UDim2.new(0,12,0,12), UDim2.new(0,8,0.5,-6), THEME.BG4)
+		U.corner(box, 3)
+		U.stroke(box, THEME.BORDER2)
+
+		-- Inner fill
+		local boxFill = U.frame(box, UDim2.new(0,6,0,6), UDim2.new(0.5,-3,0.5,-3), self.Accent)
+		boxFill.Name    = "Fill"
+		boxFill.Visible = selected[opt] or false
+		U.corner(boxFill, 2)
+
+		local itemTxt = Instance.new("TextLabel")
+		itemTxt.Size           = UDim2.new(1,-28,1,0)
+		itemTxt.Position       = UDim2.new(0,28,0,0)
+		itemTxt.BackgroundTransparency = 1
+		itemTxt.Text           = opt
+		itemTxt.TextSize       = 11
+		itemTxt.Font           = THEME.FONT
+		itemTxt.TextColor3     = THEME.TEXT1
+		itemTxt.TextXAlignment = Enum.TextXAlignment.Left
+		itemTxt.Parent         = item
+
+		checkboxes[opt] = boxFill
+
+		item.MouseEnter:Connect(function()
+			U.tween(item, {BackgroundColor3 = THEME.BG_HOVER}, 0.1)
+		end)
+		item.MouseLeave:Connect(function()
+			U.tween(item, {BackgroundColor3 = THEME.BG3}, 0.1)
+		end)
+		item.MouseButton1Click:Connect(function()
+			selected[opt]        = not selected[opt]
+			boxFill.Visible      = selected[opt]
+			selText.Text         = summaryText()
+			if onChange then onChange(getSelected()) end
+		end)
+	end
+
+	selBtn.MouseButton1Click:Connect(function()
+		if listHolder.Visible then
+			listHolder.Visible = false; chevron.Text = "▾"
+		else
+			listHolder.Visible = true;  chevron.Text = "▴"
+		end
+	end)
+
+	local state = {getSelected = getSelected}
+	return state
+end
+
+-- ============================================================
+-- MODULE ELEMENT: KEYBIND
+-- ============================================================
+function ClientLib:addKeybind(moduleData, labelText, default, onBind)
+	local currentKey = default or Enum.KeyCode.Unknown
+
+	local row = U.frame(moduleData.Frame, UDim2.new(1,0,0,20), nil, Color3.fromRGB(0,0,0), 1)
+	row.Name        = "Keybind_" .. labelText
+	row.LayoutOrder = moduleData.ElemCount
+	moduleData.ElemCount += 1
+
+	local lbl = U.label(row, labelText, 11, THEME.TEXT2, THEME.FONT)
+	lbl.Size = UDim2.new(0.6,0,1,0)
+
+	local function keyName(k)
+		if k == Enum.KeyCode.Unknown then return "—" end
+		return k.Name:upper()
+	end
+
+	local bindBtn = Instance.new("TextButton")
+	bindBtn.Name             = "BindBtn"
+	bindBtn.Size             = UDim2.new(0, 64, 0, 18)
+	bindBtn.Position         = UDim2.new(1,-64,0.5,-9)
+	bindBtn.BackgroundColor3 = THEME.BG3
+	bindBtn.BorderSizePixel  = 0
+	bindBtn.Text             = keyName(currentKey)
+	bindBtn.TextSize         = 10
+	bindBtn.Font             = THEME.FONT
+	bindBtn.TextColor3       = THEME.TEXT2
+	bindBtn.AutoButtonColor  = false
+	bindBtn.Parent           = row
+	U.corner(bindBtn, THEME.RAD_SMALL)
+	U.stroke(bindBtn, THEME.BORDER2)
+
+	local listening = false
+	local conn
+
+	bindBtn.MouseButton1Click:Connect(function()
+		if listening then return end
+		listening = true
+		bindBtn.Text       = "..."
+		bindBtn.TextColor3 = THEME.TEXT1
+		if conn then conn:Disconnect() end
+		conn = UserInputService.InputBegan:Connect(function(inp, gpe)
+			if gpe then return end
+			if inp.UserInputType == Enum.UserInputType.Keyboard then
+				listening = false
+				conn:Disconnect()
+				if inp.KeyCode == Enum.KeyCode.Escape then
+					currentKey         = Enum.KeyCode.Unknown
+					bindBtn.Text       = "—"
+					bindBtn.TextColor3 = THEME.TEXT2
+				else
+					currentKey         = inp.KeyCode
+					bindBtn.Text       = keyName(currentKey)
+					bindBtn.TextColor3 = THEME.TEXT2
+					-- Register keybind
+					self.KeybindMap[currentKey] = function()
+						if onBind then onBind(currentKey) end
+					end
+				end
+			end
+		end)
+	end)
+
+	return {getKey = function() return currentKey end}
+end
+
+-- ============================================================
+-- MODULE ELEMENT: TEXT INPUT
+-- ============================================================
+function ClientLib:addTextInput(moduleData, labelText, placeholder, default, onChange)
+	local container = U.frame(moduleData.Frame, UDim2.new(1,0,0,0), nil, Color3.fromRGB(0,0,0), 1)
+	container.Name        = "TextInput_" .. labelText
+	container.AutomaticSize = Enum.AutomaticSize.Y
+	container.LayoutOrder = moduleData.ElemCount
+	moduleData.ElemCount  += 1
+	U.listLayout(container, Enum.FillDirection.Vertical, 4)
+
+	local lbl = U.label(container, labelText, 11, THEME.TEXT2, THEME.FONT)
+	lbl.LayoutOrder = 0
+
+	local inputBox = Instance.new("TextBox")
+	inputBox.Name              = "Input"
+	inputBox.Size              = UDim2.new(1,0,0,24)
+	inputBox.BackgroundColor3  = THEME.BG3
+	inputBox.BorderSizePixel   = 0
+	inputBox.Text              = default or ""
+	inputBox.PlaceholderText   = placeholder or ""
+	inputBox.TextSize          = 11
+	inputBox.Font              = THEME.FONT
+	inputBox.TextColor3        = THEME.TEXT0
+	inputBox.PlaceholderColor3 = THEME.TEXT4
+	inputBox.ClearTextOnFocus  = false
+	inputBox.TextXAlignment    = Enum.TextXAlignment.Left
+	inputBox.LayoutOrder       = 1
+	inputBox.Parent            = container
+	U.corner(inputBox, THEME.RAD_ELEM)
+	U.stroke(inputBox, THEME.BORDER2)
+	U.padding(inputBox, 0, 8, 0, 10)
+
+	local stroke = U.stroke(inputBox, THEME.BORDER2)
+	inputBox.Focused:Connect(function()
+		U.tween(stroke, {Color = THEME.TEXT3}, 0.2)
+	end)
+	inputBox.FocusLost:Connect(function()
+		U.tween(stroke, {Color = THEME.BORDER2}, 0.2)
+		if onChange then onChange(inputBox.Text) end
+	end)
+
+	return {
+		getValue = function() return inputBox.Text end,
+		setValue = function(v) inputBox.Text = v end,
+	}
+end
+
+-- ============================================================
+-- MODULE ELEMENT: COLOR PICKER  (swatch + shared popup)
+-- ============================================================
+function ClientLib:addColorPicker(moduleData, labelText, default, onChange)
+	local color = default or Color3.fromRGB(91, 140, 255)
+
+	local row = U.frame(moduleData.Frame, UDim2.new(1,0,0,20), nil, Color3.fromRGB(0,0,0), 1)
+	row.Name        = "ColorRow_" .. labelText
+	row.LayoutOrder = moduleData.ElemCount
+	moduleData.ElemCount += 1
+
+	local lbl = U.label(row, labelText, 11, THEME.TEXT2, THEME.FONT)
+	lbl.Size = UDim2.new(0.55,0,1,0)
+
+	-- Hex label
+	local hexLbl = Instance.new("TextLabel")
+	hexLbl.Size              = UDim2.new(0, 60, 1, 0)
+	hexLbl.Position          = UDim2.new(1,-90,0,0)
+	hexLbl.BackgroundTransparency = 1
+	hexLbl.Text              = U.toHex(color)
+	hexLbl.TextSize          = 11
+	hexLbl.Font              = THEME.FONT_MONO
+	hexLbl.TextColor3        = THEME.TEXT2
+	hexLbl.TextXAlignment    = Enum.TextXAlignment.Right
+	hexLbl.Parent            = row
+
+	-- Swatch
+	local swatch = Instance.new("TextButton")
+	swatch.Name             = "Swatch"
+	swatch.Size             = UDim2.new(0, 22, 0, 22)
+	swatch.Position         = UDim2.new(1,-24, 0.5, -11)
+	swatch.BackgroundColor3 = color
+	swatch.BorderSizePixel  = 0
+	swatch.Text             = ""
+	swatch.AutoButtonColor  = false
+	swatch.Parent           = row
+	U.corner(swatch, THEME.RAD_SMALL)
+	U.stroke(swatch, THEME.BORDER2)
+
+	local state = {Value = color}
+
+	swatch.MouseButton1Click:Connect(function()
+		self._colorPicker:open(swatch, hexLbl, state, onChange)
+	end)
+
+	return state
+end
+
+-- ============================================================
+-- COLOR PICKER POPUP  (shared, built once)
+-- ============================================================
+function ClientLib:_buildColorPicker()
+	local cp = {}
+
+	local popupW, popupH = 220, 250
+
+	local frame = Instance.new("Frame")
+	frame.Name              = "CPPopup"
+	frame.Size              = UDim2.new(0, popupW, 0, popupH)
+	frame.Position          = UDim2.new(0, 0, 0, 0)
+	frame.BackgroundColor3  = THEME.BG2
+	frame.BorderSizePixel   = 0
+	frame.Visible           = false
+	frame.ZIndex            = 100
+	frame.Parent            = self.ScreenGui
+	U.corner(frame, 12)
+	U.stroke(frame, THEME.BORDER2)
+	U.padding(frame, 10, 10, 10, 10)
+
+	local layout = U.listLayout(frame, Enum.FillDirection.Vertical, 8)
+
+	-- SV Area
+	local svArea = Instance.new("ImageLabel")
+	svArea.Name              = "SVArea"
+	svArea.Size              = UDim2.new(1,0,0,130)
+	svArea.BackgroundColor3  = Color3.fromRGB(255,0,0)
+	svArea.Image             = ""
+	svArea.LayoutOrder       = 0
+	svArea.Parent            = frame
+	-- White gradient (left to right)
+	local satGrad = Instance.new("UIGradient")
+	satGrad.Rotation = 0
+	satGrad.Color = ColorSequence.new{
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(255,255,255)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(255,255,255)),
+	}
+	-- We'll handle this via two overlapped frames
+	satGrad:Destroy()
+
+	-- Saturation overlay (white->transparent left->right)
+	local satOv = Instance.new("Frame")
+	satOv.Size             = UDim2.new(1,0,1,0)
+	satOv.BackgroundColor3 = Color3.fromRGB(255,255,255)
+	satOv.BorderSizePixel  = 0
+	satOv.ZIndex           = 2
+	satOv.Parent           = svArea
+	local satGr = Instance.new("UIGradient")
+	satGr.Rotation = 0
+	satGr.Color = ColorSequence.new{
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(255,255,255)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(255,255,255)),
+	}
+	satGr.Transparency = NumberSequence.new{
+		NumberSequenceKeypoint.new(0, 0),
+		NumberSequenceKeypoint.new(1, 1),
+	}
+	satGr.Parent = satOv
+
+	-- Value overlay (transparent->black top->bottom)
+	local valOv = Instance.new("Frame")
+	valOv.Size             = UDim2.new(1,0,1,0)
+	valOv.BackgroundColor3 = Color3.fromRGB(0,0,0)
+	valOv.BorderSizePixel  = 0
+	valOv.ZIndex           = 3
+	valOv.Parent           = svArea
+	local valGr = Instance.new("UIGradient")
+	valGr.Rotation = 90
+	valGr.Transparency = NumberSequence.new{
+		NumberSequenceKeypoint.new(0, 1),
+		NumberSequenceKeypoint.new(1, 0),
+	}
+	valGr.Parent = valOv
+
+	U.corner(svArea, THEME.RAD_SMALL)
+
+	-- SV cursor
+	local svCur = Instance.new("Frame")
+	svCur.Name             = "SVCursor"
+	svCur.Size             = UDim2.new(0,12,0,12)
+	svCur.AnchorPoint      = Vector2.new(0.5,0.5)
+	svCur.Position         = UDim2.new(0,0,0,0)
+	svCur.BackgroundColor3 = Color3.fromRGB(255,255,255)
+	svCur.BorderSizePixel  = 0
+	svCur.ZIndex           = 10
+	svCur.Parent           = svArea
+	U.corner(svCur, 6)
+	U.stroke(svCur, Color3.fromRGB(255,255,255), 2)
+
+	-- Hue bar
+	local hueBar = Instance.new("Frame")
+	hueBar.Name            = "HueBar"
+	hueBar.Size            = UDim2.new(1,0,0,12)
+	hueBar.BackgroundColor3 = Color3.fromRGB(255,255,255)
+	hueBar.BorderSizePixel = 0
+	hueBar.LayoutOrder     = 1
+	hueBar.Parent          = frame
+	U.corner(hueBar, 6)
+	local hueGr = Instance.new("UIGradient")
+	hueGr.Color = ColorSequence.new{
+		ColorSequenceKeypoint.new(0,     Color3.fromRGB(255,0,0)),
+		ColorSequenceKeypoint.new(0.167, Color3.fromRGB(255,255,0)),
+		ColorSequenceKeypoint.new(0.333, Color3.fromRGB(0,255,0)),
+		ColorSequenceKeypoint.new(0.5,   Color3.fromRGB(0,255,255)),
+		ColorSequenceKeypoint.new(0.667, Color3.fromRGB(0,0,255)),
+		ColorSequenceKeypoint.new(0.833, Color3.fromRGB(255,0,255)),
+		ColorSequenceKeypoint.new(1,     Color3.fromRGB(255,0,0)),
+	}
+	hueGr.Parent = hueBar
+
+	local hueCur = Instance.new("Frame")
+	hueCur.Size             = UDim2.new(0,4,0,16)
+	hueCur.AnchorPoint      = Vector2.new(0.5,0.5)
+	hueCur.Position         = UDim2.new(0,0,0.5,0)
+	hueCur.BackgroundColor3 = Color3.fromRGB(255,255,255)
+	hueCur.BorderSizePixel  = 0
+	hueCur.ZIndex           = 5
+	hueCur.Parent           = hueBar
+	U.corner(hueCur, 2)
+
+	-- Bottom row: preview + hex
+	local bottom = U.frame(frame, UDim2.new(1,0,0,28), nil, Color3.fromRGB(0,0,0), 1)
+	bottom.LayoutOrder = 2
+	local bottomLayout = Instance.new("UIListLayout")
+	bottomLayout.FillDirection = Enum.FillDirection.Horizontal
+	bottomLayout.Padding       = UDim.new(0, 8)
+	bottomLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+	bottomLayout.SortOrder     = Enum.SortOrder.LayoutOrder
+	bottomLayout.Parent        = bottom
+
+	local preview = Instance.new("Frame")
+	preview.Name            = "Preview"
+	preview.Size            = UDim2.new(0,28,0,24)
+	preview.BackgroundColor3 = Color3.fromRGB(255,255,255)
+	preview.BorderSizePixel  = 0
+	preview.LayoutOrder      = 0
+	preview.Parent           = bottom
+	U.corner(preview, THEME.RAD_SMALL)
+	U.stroke(preview, THEME.BORDER2)
+
+	local hexBox = Instance.new("TextBox")
+	hexBox.Name              = "HexBox"
+	hexBox.Size              = UDim2.new(1,-36,0,24)
+	hexBox.BackgroundColor3  = THEME.BG3
+	hexBox.BorderSizePixel   = 0
+	hexBox.Text              = "#888888"
+	hexBox.TextSize          = 12
+	hexBox.Font              = THEME.FONT_MONO
+	hexBox.TextColor3        = THEME.TEXT0
+	hexBox.ClearTextOnFocus  = false
+	hexBox.TextXAlignment    = Enum.TextXAlignment.Left
+	hexBox.LayoutOrder       = 1
+	hexBox.Parent            = bottom
+	U.corner(hexBox, THEME.RAD_SMALL)
+	U.stroke(hexBox, THEME.BORDER2)
+	U.padding(hexBox, 0, 6, 0, 6)
+
+	cp.Frame   = frame
+	cp.SVArea  = svArea
+	cp.SVCur   = svCur
+	cp.HueBar  = hueBar
+	cp.HueCur  = hueCur
+	cp.Preview = preview
+	cp.HexBox  = hexBox
+
+	cp.H, cp.S, cp.V = 0, 0, 0.53
+	cp.CurrentSwatch = nil
+	cp.CurrentHexLbl = nil
+	cp.CurrentState  = nil
+	cp.CurrentCb     = nil
+	cp.Drag          = nil
+
+	function cp:getColor()
+		return Color3.fromHSV(self.H/360, self.S, self.V)
+	end
+
+	function cp:render()
+		local hueColor = Color3.fromHSV(self.H/360, 1, 1)
+		self.SVArea.BackgroundColor3 = hueColor
+
+		self.SVCur.Position = UDim2.new(self.S, 0, 1-self.V, 0)
+		self.HueCur.Position = UDim2.new(self.H/360, 0, 0.5, 0)
+
+		local c = self:getColor()
+		self.Preview.BackgroundColor3 = c
+		local hex = U.toHex(c)
+		self.HexBox.Text = hex
+
+		if self.CurrentSwatch then
+			self.CurrentSwatch.BackgroundColor3 = c
+		end
+		if self.CurrentHexLbl then
+			self.CurrentHexLbl.Text = hex
+		end
+		if self.CurrentState then
+			self.CurrentState.Value = c
+		end
+		if self.CurrentCb then
+			self.CurrentCb(c)
+		end
+	end
+
+	function cp:open(swatch, hexLbl, state, cb)
+		if self.CurrentSwatch == swatch and self.Frame.Visible then
+			self.Frame.Visible = false
+			self.CurrentSwatch = nil
+			return
+		end
+		self.CurrentSwatch = swatch
+		self.CurrentHexLbl = hexLbl
+		self.CurrentState  = state
+		self.CurrentCb     = cb
+
+		local c = swatch.BackgroundColor3
+		local h, s, v = Color3.toHSV(c)
+		self.H, self.S, self.V = h*360, s, v
+
+		-- Position popup near swatch
+		local absPos = swatch.AbsolutePosition
+		local absSize = swatch.AbsoluteSize
+		local scrSize = self.Frame.Parent.AbsoluteSize
+
+		local px = absPos.X
+		local py = absPos.Y + absSize.Y + 6
+		if px + popupW > scrSize.X then px = scrSize.X - popupW - 4 end
+		if py + popupH > scrSize.Y then py = absPos.Y - popupH - 6 end
+		if px < 4 then px = 4 end
+		if py < 4 then py = 4 end
+
+		self.Frame.Position = UDim2.new(0, px, 0, py)
+		self.Frame.Visible  = true
+		self:render()
+	end
+
+	-- SV drag
+	svArea.InputBegan:Connect(function(inp)
+		if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+			cp.Drag = "sv"
+		end
+	end)
+	hueBar.InputBegan:Connect(function(inp)
+		if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+			cp.Drag = "hue"
+		end
+	end)
+
+	UserInputService.InputChanged:Connect(function(inp)
+		if not cp.Frame.Visible then return end
+		if inp.UserInputType ~= Enum.UserInputType.MouseMovement then return end
+		if cp.Drag == "sv" then
+			local abs = cp.SVArea.AbsolutePosition
+			local sz  = cp.SVArea.AbsoluteSize
+			cp.S = U.clamp((inp.Position.X - abs.X) / sz.X, 0, 1)
+			cp.V = U.clamp(1 - (inp.Position.Y - abs.Y) / sz.Y, 0, 1)
+			cp:render()
+		elseif cp.Drag == "hue" then
+			local abs = cp.HueBar.AbsolutePosition
+			local w   = cp.HueBar.AbsoluteSize.X
+			cp.H = U.clamp((inp.Position.X - abs.X) / w, 0, 1) * 360
+			cp:render()
+		end
+	end)
+
+	UserInputService.InputEnded:Connect(function(inp)
+		if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+			cp.Drag = nil
+		end
+	end)
+
+	-- Hex input
+	hexBox.FocusLost:Connect(function()
+		local ok, c = pcall(U.fromHex, hexBox.Text)
+		if ok and c then
+			local h,s,v = Color3.toHSV(c)
+			cp.H, cp.S, cp.V = h*360, s, v
+			cp:render()
+		end
+	end)
+
+	-- Close on outside click
+	self.ScreenGui.InputBegan:Connect(function(inp)
+		if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+			if cp.Frame.Visible then
+				-- Check if click is inside popup
+				local mpos = inp.Position
+				local abs  = cp.Frame.AbsolutePosition
+				local sz   = cp.Frame.AbsoluteSize
+				if mpos.X < abs.X or mpos.X > abs.X + sz.X or
+				   mpos.Y < abs.Y or mpos.Y > abs.Y + sz.Y then
+					cp.Frame.Visible  = false
+					cp.CurrentSwatch  = nil
+				end
+			end
+		end
+	end)
+
+	return cp
+end
+
+-- ============================================================
+-- MODULE ELEMENT: BUTTON
+-- ============================================================
+function ClientLib:addButton(moduleData, labelText, text, onClick)
+	local container = U.frame(moduleData.Frame, UDim2.new(1,0,0,0), nil, Color3.fromRGB(0,0,0), 1)
+	container.Name        = "BtnRow_" .. labelText
+	container.AutomaticSize = Enum.AutomaticSize.Y
+	container.LayoutOrder = moduleData.ElemCount
+	moduleData.ElemCount  += 1
+	U.listLayout(container, Enum.FillDirection.Vertical, 4)
+
+	if labelText and labelText ~= "" then
+		local lbl = U.label(container, labelText, 11, THEME.TEXT2, THEME.FONT)
+		lbl.LayoutOrder = 0
+	end
+
+	local btn = U.button(container, text, UDim2.new(1,0,0,24))
+	btn.LayoutOrder = 1
+
+	btn.MouseButton1Click:Connect(function()
+		if onClick then onClick() end
+	end)
+
+	return btn
+end
+
+-- ============================================================
+-- MODULE ELEMENT: TEXT INPUT WITH BUTTON (like BG gif row)
+-- ============================================================
+function ClientLib:addInputWithButtons(moduleData, labelText, placeholder, buttons, onChange)
+	-- buttons = { {text="Apply", onClick=fn}, {text="Clear", onClick=fn} }
+	local container = U.frame(moduleData.Frame, UDim2.new(1,0,0,0), nil, Color3.fromRGB(0,0,0), 1)
+	container.Name        = "InputBtns_" .. labelText
+	container.AutomaticSize = Enum.AutomaticSize.Y
+	container.LayoutOrder = moduleData.ElemCount
+	moduleData.ElemCount  += 1
+	U.listLayout(container, Enum.FillDirection.Vertical, 4)
+
+	local lbl = U.label(container, labelText, 11, THEME.TEXT2, THEME.FONT)
+	lbl.LayoutOrder = 0
+
+	local row = U.frame(container, UDim2.new(1,0,0,24), nil, Color3.fromRGB(0,0,0), 1)
+	row.LayoutOrder = 1
+	local rowLayout = Instance.new("UIListLayout")
+	rowLayout.FillDirection = Enum.FillDirection.Horizontal
+	rowLayout.Padding       = UDim.new(0, 6)
+	rowLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+	rowLayout.SortOrder     = Enum.SortOrder.LayoutOrder
+	rowLayout.Parent        = row
+
+	-- Calc button widths
+	local btnTotalW = 0
+	local btnDefs   = buttons or {}
+	for _, b in ipairs(btnDefs) do
+		btnTotalW = btnTotalW + 54 + 6
+	end
+
+	local inputBox = Instance.new("TextBox")
+	inputBox.Name              = "Input"
+	inputBox.Size              = UDim2.new(1, -btnTotalW, 0, 24)
+	inputBox.BackgroundColor3  = THEME.BG3
+	inputBox.BorderSizePixel   = 0
+	inputBox.Text              = ""
+	inputBox.PlaceholderText   = placeholder or ""
+	inputBox.TextSize          = 11
+	inputBox.Font              = THEME.FONT
+	inputBox.TextColor3        = THEME.TEXT0
+	inputBox.PlaceholderColor3 = THEME.TEXT4
+	inputBox.ClearTextOnFocus  = false
+	inputBox.TextXAlignment    = Enum.TextXAlignment.Left
+	inputBox.LayoutOrder       = 0
+	inputBox.Parent            = row
+	U.corner(inputBox, THEME.RAD_ELEM)
+	U.stroke(inputBox, THEME.BORDER2)
+	U.padding(inputBox, 0, 8, 0, 8)
+
+	if onChange then
+		inputBox.FocusLost:Connect(function()
+			onChange(inputBox.Text)
+		end)
+	end
+
+	for i, bd in ipairs(btnDefs) do
+		local b = U.button(row, bd.text, UDim2.new(0, 54, 0, 24))
+		b.LayoutOrder = i
+		if bd.onClick then
+			b.MouseButton1Click:Connect(function()
+				bd.onClick(inputBox.Text)
+			end)
+		end
+	end
+
+	return {
+		getValue = function() return inputBox.Text end,
+		setValue = function(v) inputBox.Text = v end,
+	}
+end
+
+-- ============================================================
+-- MODULE: onToggle setter
+-- ============================================================
+function ClientLib:setModuleCallback(moduleData, fn)
+	moduleData.OnToggle = fn
+end
+
+-- ============================================================
+-- ACCENT COLOR SETTER
+-- ============================================================
+function ClientLib:setAccent(color)
+	self.Accent = color
+	-- Update active tab label
+	if self.ActiveTab then
+		self.ActiveTab.NameLbl.TextColor3 = color
+		self.ActiveTab.IconLbl.TextColor3 = color
+	end
+	-- Update all toggle dots that are ON
+	-- (simplified: re-color fill elements)
+end
+
+-- ============================================================
+-- TOGGLE WINDOW VISIBILITY
+-- ============================================================
+function ClientLib:setVisible(v)
+	self.Window.Visible = v
+end
+
+function ClientLib:toggle()
+	self.Window.Visible = not self.Window.Visible
+end
+
+return ClientLib
